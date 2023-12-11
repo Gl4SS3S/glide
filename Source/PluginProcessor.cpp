@@ -22,6 +22,17 @@ GlideAudioProcessor::GlideAudioProcessor()
                        )
 #endif
 {
+  // Initalise the parameters with default values
+  rate = new juce::AudioParameterFloat({"glideRate_1090", 1}, "Rate", 0.1f, 10.0f,1.0f);
+  depth = new juce::AudioParameterFloat({"glideDepth_1090", 1}, "Depth", 0.1f, 10.0f,1.0f);
+  
+  // Add parameters to the processor
+  addParameter(rate);
+  addParameter(depth);
+  
+  // Initialise non-parameter member variables
+  phase = 0.0;
+  phaseIncrement = 0.0;
 }
 
 GlideAudioProcessor::~GlideAudioProcessor()
@@ -95,6 +106,9 @@ void GlideAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     // Use this method as the place to do any pre-playback
     // initialisation that you need..
+    phase = 0.0;
+  
+    phaseIncrement = rate->get() * juce::MathConstants<double>::twoPi / sampleRate;
 }
 
 void GlideAudioProcessor::releaseResources()
@@ -135,26 +149,31 @@ void GlideAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
     auto totalNumInputChannels  = getTotalNumInputChannels();
     auto totalNumOutputChannels = getTotalNumOutputChannels();
 
-    // In case we have more outputs than inputs, this code clears any output
-    // channels that didn't contain input data, (because these aren't
-    // guaranteed to be empty - they may contain garbage).
-    // This is here to avoid people getting screaming feedback
-    // when they first compile a plugin, but obviously you don't need to keep
-    // this code if your algorithm always overwrites all the output channels.
+    // Clear unwanted noise
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear (i, 0, buffer.getNumSamples());
 
-    // This is the place where you'd normally do the guts of your plugin's
-    // audio processing...
-    // Make sure to reset the state if your inner loop is processing
-    // the samples and the outer loop is handling the channels.
-    // Alternatively, you can process the samples with the channels
-    // interleaved by keeping the same state.
-    for (int channel = 0; channel < totalNumInputChannels; ++channel)
-    {
+    // Calculate phase increment for the auto-pan effect
+    phaseIncrement = (*rate) * juce::MathConstants<double>::twoPi / getSampleRate();
+  
+    // Process each sample
+    for (int sample = 0; sample < buffer.getNumSamples(); ++sample) {
+      float panValue = (std::sin(phase) + 1.0f) / 2.0f;
+      phase += phaseIncrement;
+      if (phase >= juce::MathConstants<double>::twoPi) {
+        phase -= juce::MathConstants<double>::twoPi;
+      }
+      
+      // Auto-pan effect to stereo channels
+      for (int channel = 0; channel < totalNumInputChannels; ++channel)
+      {
         auto* channelData = buffer.getWritePointer (channel);
-
-        // ..do something to the data...
+        
+        float gain = (channel == 0) ? 1.0f - (*depth) * panValue // Left Channel
+                                    : 1.0f - (*depth) * (1.0f - panValue); // Right channel
+        
+        channelData[sample] *= gain;
+      }
     }
 }
 

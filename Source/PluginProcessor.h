@@ -55,5 +55,10 @@ public:
 
 private:
     //==============================================================================
+    juce::AudioParameterFloat *rate;
+    juce::AudioParameterFloat *depth;
+    double phase;
+    double phaseIncrement;
+  
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GlideAudioProcessor)
 };
